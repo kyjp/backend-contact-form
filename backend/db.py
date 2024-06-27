@@ -24,6 +24,9 @@ session = scoped_session(
     )
 )
 
+def create_new_session():
+    return  scoped_session(sessionmaker(autocommit=False, autoflush=True, expire_on_commit=False, bind=ENGINE))
+
 # modelで使用する
 Base = declarative_base()
 # DB接続用のセッションクラス、インスタンスが作成されると接続する
