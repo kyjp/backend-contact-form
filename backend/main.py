@@ -5,8 +5,9 @@ from pydantic import BaseModel
 from typing import List, Dict
 from starlette.middleware.cors import CORSMiddleware  # CORSを回避するために必要
 from sqlalchemy.orm import Session  # SQLAlchemyセッションのインポート
-from db import session  # DBと接続するためのセッション
+from db import session, create_new_session  # DBと接続するためのセッション
 from models import ContactTable  # 今回使うモデルをインポート
+from starlette_csrf import CSRFMiddleware
 import time
 
 app = FastAPI()
@@ -19,9 +20,15 @@ cookie_attribute = {
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:3000'],
-    allow_methods=['*'],
-    allow_headers=['*']
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+app.add_middleware(
+    CSRFMiddleware,
+    **cookie_attribute
 )
 
 @app.middleware('http')
@@ -89,13 +96,15 @@ def get_csrf_token():
 
 @app.get("/contacts", response_model=List[Contact])
 def read_contacts():
-    contacts = session.query(ContactTable).all()
+    new_session = create_new_session()
+    contacts = new_session.query(ContactTable).all()
     return contacts
 
 # idにマッチする情報を取得 GET
 @app.get("/contact/{contact_id}", response_model=Contact)
 def read_contact(contact_id: int):
-    contact = session.query(ContactTable).filter(ContactTable.id == contact_id).first()
+    new_session = create_new_session()
+    contact = new_session.query(ContactTable).filter(ContactTable.id == contact_id).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact
@@ -103,10 +112,11 @@ def read_contact(contact_id: int):
 # 情報を登録 POST
 @app.post("/contact", response_model=Contact, status_code=status.HTTP_201_CREATED, responses={422: {"model": ValidationErrorResponse}})
 async def create_contact(contact: CreateContact):
+    new_session = create_new_session()
     db_contact = ContactTable(name=contact.name, email=contact.email, content=contact.content)
-    session.add(db_contact)
-    session.commit()
-    session.refresh(db_contact)
+    new_session.add(db_contact)
+    new_session.commit()
+    new_session.refresh(db_contact)
     return db_contact
 
 # 情報を確認 POST
